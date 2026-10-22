@@ -6,12 +6,15 @@ import streamlit as st
 
 from dashboard_data import (
     ALL_MARKETS,
+    ALL_MONTHS,
     ALL_YEARS,
     SOURCE_URL,
     calculate_metrics,
+    daily_summary,
     filter_data,
     latest_complete_month,
     load_data,
+    month_is_complete,
     monthly_summary,
     subcategory_summary,
 )
@@ -52,6 +55,21 @@ with st.sidebar:
     market = st.selectbox(
         "Market", [ALL_MARKETS, *sorted(df["Market"].unique())], key="market"
     )
+    year_data = filter_data(df, year)
+    month_options = [
+        ALL_MONTHS,
+        *sorted(year_data["Order.Date"].dt.to_period("M").astype(str).unique()),
+    ]
+    # A different year must not retain an invisible month from the previous year.
+    if st.session_state.get("month", ALL_MONTHS) not in month_options:
+        st.session_state["month"] = ALL_MONTHS
+    month = st.selectbox(
+        "Month", month_options, key="month",
+        format_func=lambda value: (
+            value if value == ALL_MONTHS else f"{pd.Timestamp(value):%b %Y}"
+        ),
+    )
+    st.caption("Choose a month to align its review, metrics and product breakdown.")
     st.divider()
     st.caption("Prepared by Yule Liang")
     st.caption("Weekly review for the Global Sales Director.")
@@ -71,15 +89,39 @@ st.caption(
     "Director review: every Monday. This demonstration does not receive live orders."
 )
 
-selected = filter_data(df, year, market)
+selected = filter_data(df, year, market, month)
 if selected.empty:
-    st.info("No sales records match this selection. Choose another year or market.")
+    st.info(
+        "No sales records match this selection. Review status is unavailable, "
+        "not a confirmed zero-profit result. Choose another year, market or month."
+    )
     st.stop()
 
 st.caption(
-    f"CURRENT SCOPE: {year} / {market} / {len(selected):,} order-line records. "
-    "All figures and charts below use this selection."
+    f"CURRENT SCOPE: {year} / {market} / {month} / {len(selected):,} order-line records. "
+    "The three metrics and both charts use exactly this selection."
 )
+single_month = month != ALL_MONTHS
+if single_month:
+    chosen_period = pd.Period(month, freq="M")
+    if month_is_complete(df, month):
+        st.caption(
+            f"{chosen_period.to_timestamp():%b %Y}: full calendar month in the historical "
+            "snapshot; not a verified accounting close."
+        )
+    else:
+        observed_start = max(df["Order.Date"].min(), chosen_period.start_time)
+        observed_end = min(df["Order.Date"].max(), chosen_period.end_time)
+        status = (
+            "Preliminary month-to-date"
+            if observed_start.normalize() == chosen_period.start_time.normalize()
+            else "Preliminary partial month"
+        )
+        st.warning(
+            f"{status}: {observed_start:%d %b %Y} – {observed_end:%d %b %Y}. "
+            "Do not compare these totals directly with a full month. "
+            "A negative result prompts an early check, not the completed-month trigger."
+        )
 sales, profit, margin = calculate_metrics(selected)
 col_sales, col_profit, col_margin = st.columns(3)
 col_sales.metric("Total Sales", f"${sales:,.2f}")
@@ -89,7 +131,10 @@ col_margin.metric("Profit Margin", f"{margin:.2%}" if margin is not None else "N
 # A market's last transaction is not its coverage end: a quiet final day does
 # not make that market's month incomplete. Use the snapshot's calendar coverage.
 coverage = filter_data(df, year, ALL_MARKETS)
-review_month = latest_complete_month(coverage)
+if single_month:
+    review_month = pd.Timestamp(month) if month_is_complete(df, month) else None
+else:
+    review_month = latest_complete_month(coverage)
 if review_month is not None:
     recent = selected.loc[
         selected["Order.Date"].dt.to_period("M") == review_month.to_period("M")
@@ -98,10 +143,10 @@ if review_month is not None:
     losses = losses.loc[losses < 0]
     if not losses.empty:
         loss_description = "; ".join(
-            f"{name}: ${value:,.2f}" for name, value in losses.items()
+            f"{name}: \\${value:,.2f}" for name, value in losses.items()
         )
         st.warning(
-            f"Review trigger in {review_month:%b %Y}: {loss_description}. "
+            f"Completed-month review trigger in {review_month:%b %Y}: {loss_description}. "
             "Ask the regional team to investigate loss-making subcategories "
             "and their discount terms before the next promotion."
         )
@@ -115,14 +160,44 @@ if review_month is not None:
             f"{review_month:%b %Y}: no transactions are recorded for this market. "
             "Its review status is unavailable, not a confirmed zero-profit result."
         )
+    if not single_month:
+        st.caption(
+            f"This review checks {review_month:%b %Y} only; the metrics and charts above/below "
+            "still cover the broader selected period. Inspect this month, then choose a "
+            "flagged market, to trace its losses to product groups."
+        )
 
-trend = monthly_summary(selected)
+        def inspect_review_month():
+            st.session_state["month"] = f"{review_month:%Y-%m}"
+
+        st.button("Inspect review month", on_click=inspect_review_month)
+elif single_month:
+    preliminary_losses = selected.groupby("Market")["Profit"].sum()
+    preliminary_losses = preliminary_losses.loc[preliminary_losses < 0]
+    if not preliminary_losses.empty:
+        st.warning(
+            "Preliminary loss signal: "
+            + "; ".join(f"{name}: \\${value:,.2f}" for name, value in preliminary_losses.items())
+            + ". Ask the regional team to check product mix, pricing, discounts and costs; "
+            "the month has not met the full-calendar coverage rule."
+        )
+    else:
+        st.info("Preliminary review only: no completed-month decision is available for this selection.")
+else:
+    st.info("No complete calendar month is available for a formal review in this scope.")
+
+trend = daily_summary(selected) if single_month else monthly_summary(selected)
+date_field = "Date" if single_month else "Month"
+date_format = "%d %b" if single_month else "%b %y"
 products = subcategory_summary(selected)
 left, right = st.columns([1.15, 1], gap="large")
 
 with left:
     st.subheader("How did performance change?")
-    st.caption("Monthly totals. The panels have separate dollar scales.")
+    st.caption(
+        ("Daily totals within the selected month." if single_month else "Monthly totals.")
+        + " The panels have separate dollar scales."
+    )
     panels = []
     for field, label, color in (
         ("Sales", "Sales ($)", "#0f766e"),
@@ -132,10 +207,10 @@ with left:
             alt.Chart(trend)
             .mark_line(point=True, color=color, strokeWidth=2.5)
             .encode(
-                x=alt.X("Month:T", title=None, axis=alt.Axis(format="%b %y", tickCount=6)),
+                x=alt.X(f"{date_field}:T", title=None, axis=alt.Axis(format=date_format, tickCount=6)),
                 y=alt.Y(f"{field}:Q", title=label, scale=alt.Scale(zero=True)),
                 tooltip=[
-                    alt.Tooltip("Month:T", title="Month", format="%b %Y"),
+                    alt.Tooltip(f"{date_field}:T", title=date_field, format="%d %b %Y" if single_month else "%b %Y"),
                     alt.Tooltip(f"{field}:Q", title=field, format="$,.2f"),
                 ],
             )
@@ -154,7 +229,8 @@ with left:
     st.altair_chart(trend_chart, width="stretch", key="monthly_trend")
     st.caption(
         "Look for sales growth without comparable profit growth. "
-        "A gap represents a month with no recorded transactions, not a confirmed zero."
+        "A gap has no recorded transactions; it is not a confirmed zero. "
+        "Compare equivalent periods and consider seasonality before changing a promotion."
     )
 
 with right:
@@ -192,7 +268,7 @@ with right:
         st.caption(
             "Loss-making subcategories in this scope: "
             + "; ".join(
-                f"{row['Subcategory']} (${row['Profit']:,.2f})"
+                f"{row['Subcategory']} (\\${row['Profit']:,.2f})"
                 for _, row in losing.iterrows()
             )
             + "."
@@ -214,9 +290,15 @@ with st.expander("Data notes and business assumptions"):
           no lost precision is reconstructed. A zero-total-sales scope has no defined margin.
         - This is an educational retail scenario, not independently verified company data.
           The uploader does not establish real-company provenance or a complete profit definition.
-        - The review rule is a proposed policy: investigate any market with negative
-          profit in the latest complete month available in the selected snapshot.
-          The displayed review month is historical, not the current calendar month.
+        - Proposed workflow: check month-to-date results each Monday for early issues.
+          Investigate negative market profit formally after the month has full calendar
+          coverage. An explicitly selected complete month is reviewed directly;
+          the overview checks the latest complete month in the selected year range.
+        - Coverage is inferred from the full snapshot's date range, never the last
+          transaction of a selected market. It is not a verified accounting close.
+          Production use would require a reliable source-coverage timestamp.
+        - This snapshot ends in December 2014. No current-month data are invented,
+          and there is no automatic feed, same-elapsed-period comparison or causal model.
         - Discounts and losses may be associated. This dashboard does not establish
           that changing a discount will cause a particular profit improvement.
         - An alert can prompt a review; the charts provide the context for that review.

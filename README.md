@@ -3,217 +3,183 @@
 **Author / team: Yule Liang**  
 BANA409, Assignment 4, Part 1
 
-A Streamlit dashboard for the **Global Sales Director** to identify markets and
-product groups that need a profitability review before changing sales and discount
-plans. The dashboard uses a historical Kaggle snapshot.
+[Open the deployed dashboard](https://superstore-dashboard-asqbnzzkxe8o343yy4nzsn.streamlit.app/) ·
+[GitHub repository](https://github.com/kousaka1026/superstore-dashboard)
+
+I designed this dashboard for a **Global Sales Director** to identify markets and
+product groups that need a profitability review before changing promotion plans.
+It is a historical demonstration, not a live sales system.
 
 ![Dashboard preview with all years and markets selected](docs/dashboard-preview.png)
 
-## Step 1 — Dataset and decision-maker
+## Step 1 — Dataset and intended user
 
-- **Source:** [Global Superstore Dataset, published by Fatih İlhan on Kaggle](https://www.kaggle.com/datasets/fatihilhan/global-superstore-dataset).
-- **Source file:** `superstore.csv`, 15,844,267 bytes (about 15.1 MiB), below the exercise's approximate 25 MB limit. The repository packages it as `superstore.csv.gz` (3,196,206 bytes). This is lossless gzip compression, not sampling; decompressing it reproduces the original CSV byte for byte. Pandas reads the compressed file directly.
-- **Coverage:** January 1, 2011 through December 31, 2014.
-- **Size:** 51,290 rows and 27 original columns, covering 7 markets and 147 countries.
-- **Unit of observation:** one product line within an order. There are 25,035 distinct `Order.ID` values; multiple lines of one order must not be mistaken for separate orders.
-- **Provenance:** the uploader describes a CSV conversion of the Global Superstore data using R and links to an earlier Kaggle version. The public page does not establish independently verifiable real-company provenance. We treat it as an **educational, fictional retail scenario**, not audited company transactions. [Tableau describes the Superstore sample family as fictitious](https://help.tableau.com/current/guides/get-started-tutorial/en-us/get-started-tutorial-connect.htm); this is context, not proof of the exact lineage of this processed CSV.
-- **License:** the Kaggle dataset metadata lists MIT. The source link is retained for attribution; no ownership of the source data is claimed.
-- **Preparation:** all original rows and columns are preserved. No sampling, aggregation of the stored source, or imputation was needed. Dates are parsed and aggregates are calculated when the app runs.
+- **Source:** [Global Superstore Dataset on Kaggle, uploaded by Fatih İlhan](https://www.kaggle.com/datasets/fatihilhan/global-superstore-dataset).
+- **Period and size:** January 1, 2011–December 31, 2014; 51,290 rows, 27 original columns,
+  7 markets and 147 countries. The original single CSV is about 15.1 MiB, below the
+  exercise's approximate 25 MB limit. The repository includes the same file in
+  lossless gzip form, without sampling or removing records.
+- **Row meaning:** one product line within an order. There are 25,035 distinct
+  `Order.ID` values, so counting rows would overstate the number of orders.
+- **Provenance:** the uploader describes converting a text file to CSV with R and
+  links to an earlier Kaggle version. The page does not verify a real company as
+  the source. I treat it as an educational, fictional retail scenario.
+  [Tableau describes the Superstore sample family as fictitious](https://help.tableau.com/current/guides/get-started-tutorial/en-us/get-started-tutorial-connect.htm),
+  but that does not establish the exact lineage of this processed CSV.
+- **License:** the [Kaggle metadata](https://www.kaggle.com/api/v1/datasets/view/fatihilhan/global-superstore-dataset)
+  lists MIT. The dataset is attributed to its source.
 
-The **Global Sales Director** is the single intended decision-maker. Their role
-requires comparisons across markets and product groups. Customer service agents and
-warehouse staff would need different information, so the page is not designed for them.
+I chose the Global Sales Director because this role can coordinate regional teams
+and review promotion plans across markets. Customer service and warehouse staff
+need more operational detail than this page provides. This role and workflow are
+design assumptions, not findings from an interview with an actual company.
 
-## Step 2 — Why this dashboard is needed
+## Step 2 — Why a dashboard is needed
 
-### Who uses it and how often?
+**Use and decision.** The director reviews the page every Monday before the sales
+meeting. During a month, the purpose is to spot preliminary losses and ask for an
+early check. After the month ends, the director decides which markets and product
+groups need a formal review before approving the next promotion. High sales alone
+are not a sufficient reason to continue a promotion.
 
-The director reviews it every Monday before the weekly sales meeting and may revisit
-it when a regional team reports unusual performance. In a production system, the
-underlying transactions would refresh nightly; viewing frequency and refresh frequency
-serve different needs.
+> If the Global Sales Director sees negative total profit for a market in a complete
+> month, they will ask the regional manager to investigate the loss-making
+> subcategories, pricing, discount terms and costs before approving the next promotion.
 
-### What decision does it support?
+A negative month-to-date result prompts an early check, not the same completed-month
+decision. The director should not stop a promotion based only on this chart: the
+dataset does not identify the cause of a loss.
 
-The director decides **which markets and product groups need investigation and whether
-their sales or discount plans should be reviewed**. Sales volume alone can hide losses.
-The dashboard combines sales scale, reported profit, and profit margin, then shows the
-time trend and the subcategories contributing to profit or loss.
+**Without the dashboard.** The assumed alternative is exporting orders, filtering
+them in a spreadsheet, rebuilding pivot tables, calculating margins and sharing a
+static report. Repeating those steps can produce mismatched periods, an incorrect
+average of percentages, or losses hidden by profitable products. No time study or
+company cost data are available, so I do not claim a measured number of hours or
+dollars saved. The business risk is spending analyst time on repeated preparation
+and delaying investigation while an unprofitable promotion continues.
 
-> If the Global Sales Director sees negative profit in a market's latest complete month,
-> they will ask the regional manager to investigate loss-making subcategories and their
-> discount terms before approving the next promotion.
+**Why not just email, a report or an alert?** The director needs to change the market
+and period, then inspect the product groups behind the result. A dashboard makes
+those follow-up questions interactive with consistent calculations. An email or
+report can summarize the meeting, and an alert can flag a loss, but neither alone
+provides this interactive investigation.
 
-A second reason to investigate is sales rising without a corresponding improvement
-in profit. Such a pattern prompts a review of product mix, pricing, discounts, and
-costs; the charts alone do not prove which factor caused the change.
+## Step 3 — Metrics, charts and design choices
 
-### How would the work be done without it?
+The executed [analysis notebook](analysis.ipynb) checks data quality, distributions,
+time coverage and profitability by market, category and discount group.
 
-For this scenario, the assumed alternative is a weekly spreadsheet workflow: export
-orders, filter the period and market, rebuild pivot tables, calculate margins, and
-send screenshots to the director. Repeated manual preparation creates opportunities
-for inconsistent filters, averaging percentages incorrectly, and overlooking losses.
+### Three headline metrics
 
-There is no measured operating history for this fictional platform. As an explicit
-planning assumption, two hours spent preparing each weekly report would consume
-104 analyst-hours a year. This is an illustration of recurring work, not a measured
-time saving. The monetary risk is allowing unprofitable promotions to continue while
-their losses are hidden by sales growth or profitable products elsewhere.
-
-### Why a dashboard rather than an email, report, or alert?
-
-The same user needs to revisit the same questions every week and change the market
-or year under review. An email or fixed report cannot support that immediate change
-of scope. An alert can identify a threshold breach, but the director still needs
-historical and product context to investigate it. A dashboard combines a consistent
-set of calculations with interactive comparisons. A production alert would complement it.
-
-## Step 3 — What is shown, what is cut, and why
-
-The executed [`analysis.ipynb`](analysis.ipynb) checks shape, field types, missing
-values, duplicates, distributions, time coverage, and relationships among sales,
-profit, market, category, and discount.
-
-### Headline metrics
-
-| Metric | Definition within the selected year and market | Decision value |
+| Metric | Calculation within the selected scope | Why it matters |
 | --- | --- | --- |
-| Total Sales | `sum(Sales)` | Shows business scale; high revenue alone does not establish profitability. |
-| Total Profit | `sum(Profit)` | Shows reported profit dollars and the scale of losses. |
-| Profit Margin | `sum(Profit) / sum(Sales)` | Shows profit per sales dollar; calculated from totals, not an average of line margins. |
+| Total Sales | `sum(Sales)` | Establishes sales scale, not profitability. |
+| Total Profit | `sum(Profit)` | Shows the dollar contribution or loss. |
+| Profit Margin | `sum(Profit) / sum(Sales)` | Distinguishes high sales from efficient earnings. |
 
-Across the full snapshot, sales are **$12,642,905.00**, reported profit is
-**$1,467,457.29**, and profit margin is **11.61%**. The dashboard recalculates all three
-after either filter changes. A zero-total-sales scope displays an undefined margin as N/A.
+Across the full snapshot, these are **$12,642,905.00**, **$1,467,457.29** and **11.61%**.
+Margin is calculated from totals, not averaged across rows. A zero-sales denominator
+displays N/A.
 
 ### Two supporting charts
 
-1. **Monthly sales and profit trends**, arranged as two panels in one chart. Their
-   separate, labeled dollar scales prevent sales from making profit movement unreadable.
-   They show when performance changes and whether profit is keeping pace with sales.
-2. **Subcategory profit ranked from lowest to highest**, with negative bars in red.
-   This identifies the product groups to investigate. Tooltips include sales and margin,
-   so the director can distinguish small contributions from inefficient high-sales groups.
+1. **Sales and profit over time**, in two panels with separate labeled dollar scales.
+   The overview shows monthly totals. Selecting a specific month changes the same
+   chart to daily totals so it remains useful for investigating that month.
+2. **Subcategory profit**, ranked from lowest to highest with loss-making bars in red.
+   Tooltips include sales and margin to distinguish low contribution from low efficiency.
 
-The EDA supports these choices. Furniture produces **$4,110,884** in sales but only
-about **6.94%** margin, compared with about **13.99%** for Technology. Tables alone
-have **-$64,083.39** reported profit across the snapshot. A total-sales chart would hide
-that problem. EMEA's margin is approximately **5.45%**, which also supports a market filter.
+These choices follow the EDA: Furniture has $4,110,884 in sales but about 6.94% margin,
+compared with 13.99% for Technology. Tables lose $64,083.39 across the snapshot.
+EMEA has about 5.45% margin. Sales-only charts would obscure these profitability issues.
 
-### Filters and page order
+### Filters and investigation workflow
 
-Only **year** and **market** are exposed. They match the director's review scope and
-provide enough detail without adding ten controls. The default is all years and all
-markets so the complete snapshot is visible immediately.
+**Year, Market and Month** define the review scope. Month options include the year
+(for example, Dec 2014), so selecting December never silently combines four years.
+Changing Year resets an incompatible Month selection. The three metrics and both
+charts always use exactly the same records.
 
-The page order follows [`docs/layout.md`](docs/layout.md): title and purpose; historical
-period and refresh disclosure; the three metrics; a monthly review message; the trend
-and subcategory charts; metric definitions and expandable data notes. The indicators
-establish scale first, trends explain timing, and ranked products identify where to act.
-The sidebar keeps the filters visible. A raw customer-level table is not needed.
+The default overview shows the full snapshot and checks the latest complete month
+within the chosen year range. That review message names its own month explicitly;
+it is not a statement about the full-period KPI total. **Inspect review month**
+narrows the metrics and both charts to that month. Selecting a flagged market then
+shows its loss-making subcategories for the same period. When a specific complete
+month is selected, the review checks that month instead of silently checking a newer one.
 
-### Two things deliberately not shown
+The [layout](docs/layout.md) places purpose and dates first, then KPIs, the review
+message and the charts. The numbers establish scale, the trend shows timing and
+the product ranking identifies where to investigate.
 
-1. **Customer names and individual customer rankings.** Account-level sales actions
-   belong with account managers. They do not help the director prioritize a market or
-   subcategory profitability review and would add distracting detail.
-2. **A country/city map.** Geographic coverage is broad, but geographic area does not
-   explain profit. A market selector and ranked profit bars answer the decision more
-   directly than a map and avoid implying that large countries are more important.
+### Two deliberate exclusions
 
-### Data limitations and safeguards
+- **Customer names and customer rankings:** these support account managers, not
+  the director's market and product-group review, and add unnecessary detail.
+- **Country/city map:** market selection and profit bars answer the decision more
+  directly. Geographic area is not a measure of business importance.
 
-- **Line grain:** negative profit occurs on 12,544 lines (24.46%), not necessarily on
-  12,544 distinct orders. Rows are not counted as orders and negative values are retained.
-- **Source quality:** there are no missing cells, fully duplicated rows, or repeated
-  `Row.ID` values in this file. That does not establish that the business data are accurate.
-- **Precision:** all supplied Sales values are whole numbers, including one zero-sales
-  line with a -$1.11 profit. We retain this record in totals and do not reconstruct cents.
-- **Profit definition:** Profit is the supplied measure, not a claim about audited net
-  income. We do not subtract Shipping.Cost again because its relationship to Profit is
-  not fully documented. Dollar labels follow the dataset convention; currency conversion
-  and accounting definitions have not been independently verified.
-- **Time coverage:** all 48 months are represented globally. A selected market can have
-  a gap. Missing months stay missing in the trend, rather than being presented as a
-  confirmed zero. The snapshot dates appear prominently so historical figures cannot
-  be mistaken for live sales.
-- **Outliers and explanations:** large positive or negative transactions are retained;
-  they can be genuine high-value sales or losses. Discount groups are compared in EDA,
-  but an association between discounts and losses does not establish causality.
-- **Seasonality:** a month-to-month change can reflect a seasonal pattern. The director
-  should compare the same part of prior years before attributing a change to a promotion.
+### Safeguards against misleading conclusions
 
-## Step 4 — Refresh frequency and action
+- There are no missing cells, duplicate rows or repeated `Row.ID` values in this
+  file, but that does not verify its business accuracy. All original rows are retained.
+- Negative profit occurs on 12,544 order lines (24.46%), not necessarily that many
+  distinct orders. Outliers and losses are not removed.
+- The supplied Sales values are whole dollars. One zero-sales line has -$1.11
+  profit and remains in totals. Lost source precision is not reconstructed.
+- Profit is the supplied field, not verified net income. Shipping cost is not
+  subtracted again because its relationship to Profit is undocumented. Currency
+  labels follow the dataset convention, without verified exchange-rate treatment.
+- Missing days or months stay missing, rather than becoming confirmed zeros.
+  An empty selection has unavailable review status, not a zero-profit result.
+- An incomplete month is labeled preliminary with its available date range.
+  Month-to-date totals are not directly compared with full-month totals. No automated
+  same-elapsed-period comparison is implemented. Seasonal effects and product mix
+  must be considered before interpreting a change.
+- Associations between discounts and losses do not establish causation.
+
+## Step 4 — Refresh cadence and action
 
 | Item | Proposed production policy | Reason |
 | --- | --- | --- |
-| Data refresh | Nightly after the transaction system closes its daily batch | Orders change daily; weekly planning does not require second-by-second refresh. |
-| Director review | Every Monday before the sales meeting | Fits the recurring sales and promotion review. |
-| Metric tracked | Monthly reported profit for each market | A sales increase should not conceal an unprofitable market. |
-| Action trigger | A market's total profit is below $0 for the latest complete month | Ask the regional team to investigate the losing product groups and discount terms. |
+| Refresh | Nightly after the transaction batch | Adds new orders and corrections before the next review; real-time updates are unnecessary. |
+| Weekly review | Every Monday, inspect the current month-to-date figures | Identify emerging losses and request an early check while the month is still open. |
+| Formal trigger | A market's complete-month reported profit is below $0 | Investigate that month's losing subcategories, prices, discounts and costs before the next promotion. |
 
-The $0 trigger is a **proposed management rule**, not a historical corporate policy
-or a threshold learned from this data. The app evaluates it for the latest complete
-month available in the selected historical scope and labels the month explicitly.
-Calendar completeness uses the full snapshot's coverage for the selected year,
-not the date of a particular market's last transaction.
-When the condition is met, it shows the market and loss amount. A positive market
-total is not an all-clear: the subcategory chart can still reveal losses within it.
+Nightly refresh serves the changing **month-to-date** view, not just the completed-month
+trigger. In production, the current month would be labeled preliminary until verified
+source coverage reaches month end. A week of stale data could omit a week's new orders
+and cause the meeting to miss an emerging loss. Even completed months may change after
+late postings or corrections. No specific monetary impact is measurable from this file.
 
-In production, the alert check could run after each nightly load, using the most
-recent completed month's result. The director's weekly review then adds context.
-Nightly refresh also supports later improvements such as a month-to-date comparison,
-but such a comparison would need an agreed seasonal baseline and is not implemented here.
+The $0 threshold is a proposed management rule, not an observed corporate policy or
+a threshold learned from the data. A positive market total does not clear every
+subcategory: the breakdown can still reveal losses inside a profitable market.
 
-One day of stale data could omit corrections or newly posted transactions and mislead
-a follow-up review. A week of stale data could cause an entire sales meeting to use the
-previous position, delaying a review of loss-making promotions. Real-time integration
-would add cost without changing the timing of this director's routine decisions.
+**What the demonstration actually does:** it reads the committed 2011–2014 CSV.
+There is **no automatic production feed or current-month data**. Calendar coverage
+is inferred from the full snapshot's date range, not a selected market's last sale;
+it is not proof that accounting has closed or every transaction has arrived. All
+48 historical months have full calendar coverage, so none is presented as current
+month-to-date data. The partial-month logic applies if a future replacement snapshot
+ends mid-month. A real deployment would need a verified source-coverage timestamp.
+Refreshing Streamlit's cache does not generate new transactions.
 
-The deployed demonstration reads the committed CSV. **No automatic production data
-feed is connected.** The page states the historical data period, intended nightly
-refresh, and weekly review frequency. Updating the app's cache does not create new orders.
+## Step 5 — Run and verify
 
-## Step 5 — Run, verify, and deploy
-
-The project was initialized with `uv init` for Python 3.14. The complete CSV is included in lossless gzip form
-so the app needs neither Kaggle credentials nor an external data download at runtime.
+The project was initialized with `uv init` and uses Python 3.14.
 
 ```bash
 uv sync
 uv run streamlit run app.py
-```
-
-Open `analysis.ipynb` with the project's `.venv` Python interpreter to inspect the
-executed exploration. Run the verification suite with:
-
-```bash
 uv run python -m unittest discover -s tests -v
 ```
 
-The checks cover full-snapshot totals, filter and monthly reconciliation, undefined
-zero-sales margins, missing months, successful app rendering, and the actual data sent
-to both charts after filters change.
+The public application is deployed from this repository's `main` branch, entrypoint
+`app.py`, using Yule Liang's Streamlit account. [Verification notes](docs/verification.md)
+describe the checks. For Canvas, the app and repository links are in the first
+Markdown cell of `phone-trade-in.ipynb`; the remaining notebook contains Part 2.
 
-To deploy on **Yule Liang's own Streamlit Community Cloud account**:
+## Assignment references
 
-1. Connect that account to GitHub and choose repository
-   `kousaka1026/superstore-dashboard`.
-2. Select branch `main` and entrypoint `app.py`.
-3. Under Advanced settings select **Python 3.14**, as required by the course, then deploy.
-4. Verify that the public app loads and that changing Year or Market updates all
-   three indicators and both charts.
-5. Copy the resulting public app URL and the repository URL into the first Markdown
-   cell of the final `phone-trade-in.ipynb` submission. No deployment URL is claimed
-   before deployment has succeeded.
-
-Repository: [kousaka1026/superstore-dashboard](https://github.com/kousaka1026/superstore-dashboard).
-
-## Sources
-
-- [Course exercise and required design questions](https://bana409.harrywang.me/docs/lectures/data-app/in-class-group-exercise)
-- [Assignment 4 and individual account/submission requirements](https://bana409.harrywang.me/docs/assignments/assignment-4-linear-regression-sgd-and-random-forest)
-- [Kaggle data source](https://www.kaggle.com/datasets/fatihilhan/global-superstore-dataset)
-- [Kaggle metadata identifying the uploader, conversion, and license](https://www.kaggle.com/api/v1/datasets/view/fatihilhan/global-superstore-dataset)
-- [Tableau documentation on the fictional Superstore sample family](https://help.tableau.com/current/guides/get-started-tutorial/en-us/get-started-tutorial-connect.htm)
+- [In-class exercise and design questions](https://bana409.harrywang.me/docs/lectures/data-app/in-class-group-exercise)
+- [Assignment 4 and individual submission requirements](https://bana409.harrywang.me/docs/assignments/assignment-4-linear-regression-sgd-and-random-forest)
