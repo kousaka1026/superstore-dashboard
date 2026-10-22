@@ -86,7 +86,10 @@ col_sales.metric("Total Sales", f"${sales:,.2f}")
 col_profit.metric("Total Profit", f"${profit:,.2f}")
 col_margin.metric("Profit Margin", f"{margin:.2%}" if margin is not None else "N/A")
 
-review_month = latest_complete_month(selected)
+# A market's last transaction is not its coverage end: a quiet final day does
+# not make that market's month incomplete. Use the snapshot's calendar coverage.
+coverage = filter_data(df, year, ALL_MARKETS)
+review_month = latest_complete_month(coverage)
 if review_month is not None:
     recent = selected.loc[
         selected["Order.Date"].dt.to_period("M") == review_month.to_period("M")
@@ -106,6 +109,11 @@ if review_month is not None:
         st.info(
             f"{review_month:%b %Y}: no selected market had negative total profit. "
             "Check the subcategory chart for losses hidden within profitable markets."
+        )
+    else:
+        st.info(
+            f"{review_month:%b %Y}: no transactions are recorded for this market. "
+            "Its review status is unavailable, not a confirmed zero-profit result."
         )
 
 trend = monthly_summary(selected)

@@ -75,6 +75,9 @@ class DashboardTests(unittest.TestCase):
             if "Subcategory" in chart_data.columns:
                 self.assertEqual(spec["layer"][0]["encoding"]["y"]["field"], "Subcategory")
                 self.assertEqual(chart_data["Subcategory"].nunique(), 17)
+        app.selectbox(key="market").select("Canada").run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(any("Dec 2014" in item.value for item in app.info))
 
 
 if __name__ == "__main__":

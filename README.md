@@ -156,6 +156,8 @@ The sidebar keeps the filters visible. A raw customer-level table is not needed.
 The $0 trigger is a **proposed management rule**, not a historical corporate policy
 or a threshold learned from this data. The app evaluates it for the latest complete
 month available in the selected historical scope and labels the month explicitly.
+Calendar completeness uses the full snapshot's coverage for the selected year,
+not the date of a particular market's last transaction.
 When the condition is met, it shows the market and loss amount. A positive market
 total is not an all-clear: the subcategory chart can still reveal losses within it.
 
