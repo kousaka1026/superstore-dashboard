@@ -1,0 +1,19 @@
+[project]
+name = "superstore-dashboard"
+version = "0.1.0"
+description = "Sales and profitability dashboard by Yule Liang for BANA409 Assignment 4"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "altair>=6.3.0",
+    "matplotlib>=3.11.2",
+    "pandas>=3.1.0",
+    "streamlit>=1.66.1",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+    "nbclient>=0.11.0",
+    "nbformat>=5.11.1",
+]
