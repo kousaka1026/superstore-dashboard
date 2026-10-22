@@ -31,3 +31,7 @@ The application has been deployed at
 [the owner's public Streamlit URL](https://superstore-dashboard-asqbnzzkxe8o343yy4nzsn.streamlit.app/).
 The revised month-filter workflow was verified locally in a fresh headless Edge
 session before publishing. The README preview shows the revised overview.
+
+If Community Cloud retains an older imported helper module after a source update,
+use a fresh deployment/reboot rather than changing the business calculations.
+See [Streamlit's reboot guidance](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/reboot-your-app).
